@@ -7,7 +7,7 @@ trabajos (cada proyecto se guarda en un fichero `.tns`).
 
 Interfaz gráfica con **Flet 1.0.1** (Flutter embebido) y Python **3.14**.
 
-🌐 **Web**: <https://japr.my.canva.site/talnumstack-pagenumber-es>
+🌐 **Web y descargas**: <https://japr.my.canva.site/talnumstack-pagenumber-es>
 
 ## Requisitos
 
