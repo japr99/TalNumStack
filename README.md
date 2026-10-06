@@ -1,9 +1,6 @@
 # TalNumStack
 
-TalNumStack es un software de **imposición y paginación para impresión**: genera PDF de
-imposición a partir de PDFs de trabajo, permite paginar y montar pliegos con **ajuste
-automático o manual**, generar listados de exportación para **Fiery** y llevar el control de
-trabajos (cada proyecto se guarda en un fichero `.tns`).
+TalNumStack es una herramienta diseñada para calcular páginas numeradas en procesos de corte y apilado, ideal para la creación de talonarios o tickets numerados en multi producción. Este software también permite imponer las páginas y generar copias para papel autocopiativo, que puede ser impreso en máquinas digitales con diversos tipos de papel.
 
 Interfaz gráfica con **Flet 1.0.1** (Flutter embebido) y Python **3.14**.
 
