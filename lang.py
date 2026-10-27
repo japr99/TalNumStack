@@ -6,7 +6,7 @@ Contiene el diccionario de traducciones y la función de consulta `t()`.
 from typing import Dict
 
 # Version number (editar aquí para cambiar solo el número de versión)
-TALNUMSTACK_VERSION = "3.9"
+TALNUMSTACK_VERSION = "3.91"
 TALNUMSTACK_REALISE = ""
 # Sufijo de versión para mostrar en la info de la app: " Beta" solo si hay realise.
 TALNUMSTACK_VERSION_FULL = TALNUMSTACK_VERSION + (
@@ -41,7 +41,12 @@ cierre en pc.
 añadido eliminar preferencias al dialogo de preferencias.
 """
 
-"""TALNUMSTACK, migracion a flet 1.0
+"""TALNUMSTACK, cambios en esta versión: 3.90
+migracion a flet 1.0
+"""
+
+"""TALNUMSTACK, cambios en esta versión: 3.91
+Arreglado la carga de preferencias de marcas de corte y el icono de .tns en macOS.
 """
 
 LANGUAGE_NAMES = {"es": "Español", "en": "English", "cat": "Català"}

@@ -5,6 +5,7 @@ anyio==4.12.1
 certifi==2026.1.4
 charset-normalizer==3.4.4
 flet==1.0.1
+flet-cli==1.0.1
 flet-desktop==1.0.1
 flet-mcp==1.0.1
 fonttools==4.61.1
@@ -44,3 +45,4 @@ pyobjc-framework-CoreText==12.1 ; sys_platform == "darwin"
 
 # Build executables: flet pack requiere PyInstaller en ambos SO (specs + flet_cli.__pyinstaller)
 pyinstaller ; sys_platform == "darwin" or sys_platform == "win32"
+pyinstaller_versionfile==3.1.0 ; sys_platform == "win32"

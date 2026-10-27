@@ -5331,6 +5331,124 @@ def main(page: ft.Page):
             print(f"[ARGV] No se pudo abrir: {_ex_argv}")
 
 
+def _dump_client_entitlements(bundle):
+    """Vuelca a un temporal los entitlements actuales del bundle; None si no hay.
+
+    `codesign --force` SIN `--entitlements` borra los que ya había, y sin
+    com.apple.security.files.user-selected.read-write el file_picker del
+    cliente Flutter revienta con PlatformException(ENTITLEMENT_NOT_FOUND).
+    Peor: flet pack copia el cliente de ~/.flet/client/, así que un re-firmado
+    sin entitlements acaba en el tar empaquetado y el fallo se vuelve permanente.
+    """
+    import subprocess
+    import tempfile
+
+    try:
+        r = subprocess.run(
+            ["codesign", "-d", "--entitlements", ":-", "--xml", str(bundle)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception:
+        return None
+    xml = r.stdout if r.returncode == 0 else ""
+    i = xml.find("<?xml")
+    if i < 0:
+        return None
+    fd, path = tempfile.mkstemp(prefix="flet-ents-", suffix=".plist")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(xml[i:])
+    return path
+
+
+def _reparar_icono_tns_cliente(bundle) -> bool:
+    """Corrige el icono de tipo de documento del cliente Flet cacheado.
+
+    Los tar brandeados antiguos declaraban el `.tns` con
+    `CFBundleTypeIconFile = "TalNumStack"` (sin extensión, archivo
+    inexistente): LaunchServices resolvía el `.tns` con el icono genérico.
+    Aquí se reescribe a `AppIcon.icns` (que sí existe) y se re-firma ad-hoc
+    conservando entitlements (file_picker). Devuelve True solo si hubo cambio.
+    """
+    try:
+        import builtins
+        import plistlib
+        import subprocess
+
+        plist_path = bundle / "Contents" / "Info.plist"
+        res = bundle / "Contents" / "Resources"
+        icono = "AppIcon.icns"
+        if not (res / icono).exists():
+            return False
+        with open(plist_path, "rb") as f:
+            original = f.read()
+        pl = plistlib.loads(original)
+
+        def _roto(nombre):
+            # Sin extensión o apuntando a un archivo que no está → icono roto.
+            return bool(nombre) and ("." not in nombre or not (res / nombre).exists())
+
+        cambiado = False
+        for tipo in pl.get("CFBundleDocumentTypes") or []:
+            if _roto(tipo.get("CFBundleTypeIconFile")):
+                tipo["CFBundleTypeIconFile"] = icono
+                cambiado = True
+        for uti in pl.get("UTExportedTypeDeclarations") or []:
+            if _roto(uti.get("UTTypeIconFile")):
+                uti["UTTypeIconFile"] = icono
+                cambiado = True
+        if not cambiado:
+            return False
+
+        ents = _dump_client_entitlements(bundle)
+        with open(plist_path, "wb") as f:
+            plistlib.dump(pl, f)
+        cmd = ["codesign", "--force", "--deep", "-s", "-"]
+        if ents:
+            cmd += ["--entitlements", ents]
+        r = subprocess.run(cmd + [str(bundle)], capture_output=True, text=True)
+        if ents:
+            os.remove(ents)
+        if r.returncode != 0:
+            # No dejar el cliente con la firma rota: restaurar el plist.
+            with open(plist_path, "wb") as f:
+                f.write(original)
+            builtins.print(f"[FLET] no se pudo re-firmar el cliente: {r.stderr[:200]}")
+            return False
+        builtins.print(f"[FLET] icono .tns del cliente corregido: {bundle}")
+        _limpiar_cache_iconos()
+        return True
+    except Exception as e:
+        import builtins
+
+        builtins.print(f"[FLET] Aviso reparando icono .tns del cliente: {e}")
+        return False
+
+
+def _limpiar_cache_iconos() -> None:
+    """Vacía la caché de IconServices del usuario (una vez, tras reparar el .tns).
+
+    Sin esto, macOS sigue sirviendo el icono genérico cacheado para la UTI
+    `com.japr.talnumstack.tns` aunque LaunchServices ya apunte al .icns bueno.
+    """
+    try:
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        subprocess.run(["killall", "iconservicesagent"], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cache_c = Path(tempfile.gettempdir()).parent / "C"
+        for nombre in ("com.apple.iconservices", "com.apple.iconservicesagent"):
+            shutil.rmtree(cache_c / nombre, ignore_errors=True)
+        subprocess.run(["killall", "Finder"], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
 def _heal_flet_client_cache() -> bool:
     """Garantiza que el cliente cacheado se llama TalNumStack (nunca Flet).
 
@@ -5379,6 +5497,9 @@ def _heal_flet_client_cache() -> bool:
                 bundle = find_macos_app_bundle(cache_dir)
                 instalado = True
             elif bundle is not None:
+                # Volcar los entitlements ANTES de tocar nada: el re-firmado
+                # los borraría y el file_picker dejaría de poder abrir diálogos.
+                ents_path = _dump_client_entitlements(bundle)
                 renombrado = bundle.parent / "TalNumStack.app"
                 bundle.rename(renombrado)
                 bundle = renombrado
@@ -5390,10 +5511,12 @@ def _heal_flet_client_cache() -> bool:
                 pl["CFBundleIdentifier"] = "com.japr.talnumstack"
                 with open(plist_path, "wb") as f:
                     plistlib.dump(pl, f)
-                subprocess.run(
-                    ["codesign", "--force", "--deep", "-s", "-", str(bundle)],
-                    check=False,
-                )
+                cmd = ["codesign", "--force", "--deep", "-s", "-"]
+                if ents_path:
+                    cmd += ["--entitlements", ents_path]
+                subprocess.run([*cmd, str(bundle)], check=False)
+                if ents_path:
+                    os.remove(ents_path)
                 builtins.print(f"[FLET] Cliente renombrado a {bundle.name} (dev)")
                 instalado = True
 
@@ -5405,6 +5528,9 @@ def _heal_flet_client_cache() -> bool:
                     instalado = True
             except OSError:
                 pass
+        # Cachés antiguas del cliente: el .tns declaraba un .icns inexistente.
+        if bundle is not None and _reparar_icono_tns_cliente(bundle):
+            instalado = True
         return instalado
     except Exception as e:
         import builtins
@@ -5486,6 +5612,48 @@ def _brand_and_set_client_icon(instalado: bool = False) -> None:
         builtins.print(f"[FLET] Aviso branding del cliente: {e}")
 
 
+def _registrar_tns_launchservices() -> None:
+    """Registra el .app instalado como dueño de la UTI `.tns` (solo empaquetada).
+
+    Sin esto, si la app se copia a mano (zip) o LaunchServices conserva un
+    registro viejo/inactivo, Finder no resuelve el icono de los `.tns`. Se
+    ejecuta una vez por versión y ruta: un marcador en el config dir evita
+    repetir el fork en cada arranque. Nunca revienta la app.
+    """
+    try:
+        if not getattr(sys, "frozen", False):
+            return
+        import subprocess
+        from pathlib import Path
+
+        from talnum_preferences import get_config_dir
+        from lang import TALNUMSTACK_VERSION
+
+        bundle = Path(sys.executable).resolve().parents[2]
+        if bundle.suffix != ".app" or not bundle.is_dir():
+            return
+        lsregister = (
+            "/System/Library/Frameworks/CoreServices.framework/Frameworks/"
+            "LaunchServices.framework/Support/lsregister"
+        )
+        if not os.path.exists(lsregister):
+            return
+
+        marca = get_config_dir() / f".tns-lsregistered-{TALNUMSTACK_VERSION}"
+        if marca.exists() and marca.read_text(encoding="utf-8").strip() == str(bundle):
+            return
+        subprocess.run(
+            [lsregister, "-f", str(bundle)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
+        marca.write_text(str(bundle), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _ocultar_icono_python_dock() -> None:
     """Quita el wrapper de Python del Dock en dev (el equivalente a LSUIElement).
 
@@ -5513,6 +5681,7 @@ if __name__ == "__main__":
     if sys.platform == "darwin":
         _ocultar_icono_python_dock()
         _brand_and_set_client_icon(_heal_flet_client_cache())
+        _registrar_tns_launchservices()
     if sys.platform == "win32":
         try:
             from fileassoc_windows import registrar_tns

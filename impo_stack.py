@@ -2040,9 +2040,14 @@ def crear_capa_marca_texto(
         f"canvas={canvas_w:.0f}x{canvas_h:.0f}"
     )
 
+    # Ancla = punto de la posicion dentro del canvas (mismo modelo que fritz_pdf_generator).
+    # Sin esto el texto siempre se anclaba en (0,0) y solo SUP_IZQ salia dentro.
+    anchor_x = (alignment_container.x + 1) / 2 * canvas_w + offset_canvas_x
+    anchor_y = (alignment_container.y + 1) / 2 * canvas_h + offset_canvas_y
+
     cv_text = cv.Text(
-        offset_canvas_x,
-        offset_canvas_y,
+        anchor_x,
+        anchor_y,
         contenido,
         ft.TextStyle(
             size=texto_size,

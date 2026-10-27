@@ -3846,6 +3846,20 @@ def cargar_preferencias_imposicion(
             print(
                 f"[PREF] ✅ Cruces cargadas: {LONGITUD_CRUZ_MM}mm, {GROSOR_CRUZ_PT}pt, offset={OFFSET_CRUZ_MM}mm, seg={OFFSET_SEGURIDAD_MM}mm, brazo_max={LONGITUD_BRAZO_MAX_MM}mm"
             )
+            # Volcar en el estado compartido, igual que el bloque de marcas de
+            # texto: sin esto `restaurar_estado_impo_ui()` y el bloque 7.6 de
+            # `procesar_pdf_para_imposicion` reescriben las globales con los
+            # valores por defecto del estado (10/0.5/5) y se pierden las
+            # preferencias de cruces al crear un trabajo nuevo.
+            try:
+                _estado_impo_ui["longitud_cruz_mm"] = LONGITUD_CRUZ_MM
+                _estado_impo_ui["grosor_cruz_pt"] = GROSOR_CRUZ_PT
+                _estado_impo_ui["offset_cruz_mm"] = OFFSET_CRUZ_MM
+                _estado_impo_ui["auto_sangre_offset_cruz"] = AUTO_SANGRE_OFFSET_CRUZ
+                _estado_impo_ui["offset_seguridad_mm"] = OFFSET_SEGURIDAD_MM
+                _estado_impo_ui["longitud_brazo_max_mm"] = LONGITUD_BRAZO_MAX_MM
+            except Exception:
+                pass
 
         # Cargar datos de marcas de texto
         if "marcas_texto" in preferencias:
@@ -4045,19 +4059,6 @@ def crear_ventana_ordenar_imposicion(
         # Resetear sangre a 0 para nueva imposición
         global SANGRE
         SANGRE = 0.0
-        # Agrego prints para mostrar cuándo y con qué valores se aplican las preferencias al crear un trabajo nuevo.
-        try:
-            from pdf_ordenado_ui import cargar_preferencias_checkboxes
-
-            checks = cargar_preferencias_checkboxes()
-            print(
-                f"[DEBUG] CREANDO TRABAJO NUEVO: se aplican preferencias a los checkboxes"
-            )
-            print(
-                f"[DEBUG] Valores de preferencias: cruces={checks.get('cruces_y_marcas')}, lineas={checks.get('lineas_corte')}, marcas={checks.get('marcas_texto')}, exterior={checks.get('linea_exterior')}"
-            )
-        except Exception as ex:
-            print(f"[DEBUG] Error al cargar preferencias de checkboxes: {ex}")
 
     # Calcular tamaño del viewer basado en el tamaño de la página.
     # Cromo horizontal: padding wrapper/inner (5+5) + columna derecha (320) +
